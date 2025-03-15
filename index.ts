@@ -580,35 +580,7 @@ server.tool(
   }
 );
 
-server.resource(
-  "solanaDocsInstallation",
-  new ResourceTemplate("solana://docs/intro/installation", { list: undefined }),
-  async (uri) => {
-    try {
-      const response = await fetch(
-        `https://raw.githubusercontent.com/solana-foundation/solana-com/main/content/docs/intro/installation.mdx`
-      );
-      const fileContent = await response.text();
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            text: fileContent,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            text: `Error: ${(error as Error).message}`,
-          },
-        ],
-      };
-    }
-  }
-);
+
 server.tool(
   "checkProgramDeployment",
   "Checks various aspects of a Solana program deployment",
@@ -883,7 +855,36 @@ server.resource(
     }
   }
 );
-
+server.resource(
+    "solanaDocsInstallation",
+    new ResourceTemplate("solana://docs/intro/installation", { list: undefined }),
+    async (uri) => {
+      try {
+        const response = await fetch(
+          `https://raw.githubusercontent.com/solana-foundation/solana-com/main/content/docs/intro/installation.mdx`
+        );
+        const fileContent = await response.text();
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              text: fileContent,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              text: `Error: ${(error as Error).message}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+  
 server.prompt(
   "calculate-storage-deposit",
   "Calculate storage deposit for a specified number of bytes",

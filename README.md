@@ -130,3 +130,74 @@ Please be extremely careful when installing & trying out MCP servers
 from unknown developers.
 
 Please use a sandboxed environment when trying out MCP servers, with no crucial information in it to prevent potential damage.
+
+
+## Tools
+### 1. getPriorityFee
+- **Description**: Look up priority fee for a transaction.
+- **Input**: 
+  - `serealizedTransaction`: Serialized transaction.
+- **Output**: Priority fee estimate.
+
+### 2. generateSecurityTxt
+- **Description**: Generate security.txt content for Solana programs.
+- **Input**: Various fields including `name`, `project_url`, `contacts`, `policy`, etc.
+- **Output**: Generated security.txt content and macro.
+
+### 3. getProgramIdl
+- **Description**: Fetch the IDL for a Solana program.
+- **Input**: 
+  - `programId`: Program ID.
+- **Output**: IDL in JSON format.
+
+### 4. createGPAFilters
+- **Description**: Create getProgramAccounts filters based on a program's IDL.
+- **Input**: 
+  - `programId`: Program ID.
+- **Output**: GPA filters and account types.
+
+### 5. testProgramIdl
+- **Description**: Test a Solana program IDL with input JSON.
+- **Input**: 
+  - `programId`: Program ID.
+  - `inputJson`: JSON input for the instruction.
+  - `instructionName`: Name of the instruction to test.
+- **Output**: Simulation result.
+
+### 6. lookupProgramAuth
+- **Description**: Check the program authority for a given program ID.
+- **Input**: 
+  - `programId`: Program ID.
+- **Output**: Program authority public key.
+
+### 7. checkupProgram
+- **Description**: Check if a program has verified build and security.txt.
+- **Input**: 
+  - `programId`: Program ID.
+- **Output**: Verification status and security.txt content.
+
+### 8. checkProgramDeployment
+- **Description**: Check various aspects of a Solana program deployment.
+- **Input**: 
+  - `programId`: Program ID.
+- **Output**: Detailed report on program deployment.
+
+### 9. createCPI
+- **Description**: Generate an example CPI statement for a given Solana program.
+- **Input**: 
+  - `programId`: Program ID.
+  - `instructionName`: Name of the instruction.
+- **Output**: CPI example, program IDL, and cluster information.
+
+### 10. getDuneSolanaData
+- **Description**: Fetch Solana program data from Dune Analytics.
+- **Input**: 
+  - `programId`: Program ID.
+  - `days`: Number of days to look back (default: 10).
+- **Output**: Top 1000 signers, program calls, and CPI program calls data.
+
+## Usage
+
+To use these tools, you need to set up the necessary environment variables and dependencies. Each tool can be called with the required input parameters, and it will return the specified output.
+
+For tools that require API keys or specific setup (like Dune Analytics or Helius RPC), make sure to configure those properly in your environment.
