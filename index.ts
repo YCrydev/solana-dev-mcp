@@ -15,6 +15,7 @@ import {
   Transaction,
   TransactionInstruction,
   Keypair,
+  sendAndConfirmRawTransaction,
 } from "@solana/web3.js";
 import * as fs from "fs";
 import * as anchor from "@project-serum/anchor";
@@ -177,32 +178,33 @@ server.tool(
     }
   }
 );
+// Generate security.txt content for Solana programs
 server.tool(
-    "generateSecurityTxt",
-    "Generate security.txt content for Solana programs",
-    {
-      name: z.string(),
-      project_url: z.string().url(),
-      contacts: z.string(),
-      policy: z.string(),
-      preferred_languages: z.string().optional(),
-      encryption: z.string().optional(),
-      source_code: z.string().url().optional(),
-      source_release: z.string().optional(),
-      source_revision: z.string().optional(),
-      auditors: z.string().optional(),
-      acknowledgements: z.string().optional(),
-      expiry: z.string().optional(),
-    },
-    async (input) => {
-      const content = Object.entries(input)
-        .filter(([_, value]) => value !== undefined)
-        .map(([key, value]) => `${key}\0${value}\0`)
-        .join('');
-  
-      const securityTxt = `"=======BEGIN SECURITY.TXT V1=======\\0${content}=======END SECURITY.TXT V1=======\\0"`;
-  
-      const macro = `#[macro_export]
+  "generateSecurityTxt",
+  "Generate security.txt content for Solana programs",
+  {
+    name: z.string(),
+    project_url: z.string().url(),
+    contacts: z.string(),
+    policy: z.string(),
+    preferred_languages: z.string().optional(),
+    encryption: z.string().optional(),
+    source_code: z.string().url().optional(),
+    source_release: z.string().optional(),
+    source_revision: z.string().optional(),
+    auditors: z.string().optional(),
+    acknowledgements: z.string().optional(),
+    expiry: z.string().optional(),
+  },
+  async (input) => {
+    const content = Object.entries(input)
+      .filter(([_, value]) => value !== undefined)
+      .map(([key, value]) => `${key}\0${value}\0`)
+      .join("");
+
+    const securityTxt = `"=======BEGIN SECURITY.TXT V1=======\\0${content}=======END SECURITY.TXT V1=======\\0"`;
+
+    const macro = `#[macro_export]
   macro_rules! security_txt {
       () => {
           #[cfg_attr(target_arch = "bpf", link_section = ".security.txt")]
@@ -213,17 +215,19 @@ server.tool(
   }
   
   security_txt!();`;
-  
-      return {
-        content: [
-          { type: "text", text: "Generated security.txt content:" },
-          { type: "text", text: securityTxt },
-          { type: "text", text: "Generated macro:" },
-          { type: "text", text: macro },
-        ],
-      };
-    }
-  );
+
+    return {
+      content: [
+        { type: "text", text: "Generated security.txt content:" },
+        { type: "text", text: securityTxt },
+        { type: "text", text: "Generated macro:" },
+        { type: "text", text: macro },
+      ],
+    };
+  }
+);
+
+// Fetch the IDL for a Solana program
 server.tool(
   "getProgramIdl",
   "Used to fetch the IDL for a Solana program",
@@ -300,6 +304,8 @@ server.tool(
     }
   }
 );
+
+// Create get Program Accounts filters for a Solana program based on its IDL
 server.tool(
   "createGPAFilters",
   "Used to create get Program Accounts filters for a Solana program based on its IDL",
@@ -361,6 +367,7 @@ server.tool(
   }
 );
 
+// Test a Solana program IDL with input JSON
 server.tool(
   "testProgramIdl",
   "Test a Solana program IDL with input JSON",
@@ -374,7 +381,11 @@ server.tool(
       logToFile(JSON.stringify({ programId, inputJson, instructionName }));
       const payerPrivateKey = process.env.PAYER_PRIVATE_KEY;
       if (!payerPrivateKey) {
-        throw new Error("PAYER_PRIVATE_KEY not found in environment variables");
+        return {
+          content: [
+            { type: "text", text: "No IDL found for the given program ID." },
+          ],
+        };
       }
 
       const secretKey = bs58.decode(payerPrivateKey);
@@ -479,32 +490,90 @@ server.tool(
     } catch (error) {
       logToFile(`Error: ${(error as Error).message}`);
       return {
-        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+        content: [
+          { type: "text", text: `Error: ${(error as Error).message}` },
+          { type: "text", text: "Expected input JSON structure:" },
+          {
+            type: "text",
+            text: `
+      The input JSON should be a string containing a JSON object with two main properties:
+      
+      1. "accounts": An array of account objects, each containing:
+         - "name": The name of the account as specified in the instruction
+         - "pubkey": The public key of the account as a base58 encoded string
+      
+      2. "args": An array of argument objects, each containing:
+         - "name": The name of the argument as specified in the instruction
+         - "value": The value of the argument
+         - "type" (optional): The type of the argument (e.g., "u64", "i64", "publicKey")
+      
+      Example structure:
+      {
+        "accounts": [
+          { "name": "accountName1", "pubkey": "base58EncodedPublicKey1" },
+          { "name": "accountName2", "pubkey": "base58EncodedPublicKey2" }
+        ],
+        "args": [
+          { "name": "argName1", "value": "argValue1", "type": "argType1" },
+          { "name": "argName2", "value": "argValue2", "type": "argType2" }
+        ]
+      }
+      
+      Ensure that the account names and argument names match those specified in the instruction's IDL.
+          `,
+          },
+        ],
       };
     }
   }
 );
+
+// Checks the program authority for a given program ID
 server.tool(
   "lookupProgramAuth",
   "Checks the program authority for a given program ID",
   { programId: z.string() },
   async ({ programId }) => {
     try {
-      const programPubkey = new PublicKey(programId);
-      const programInfo = await connection.getAccountInfo(programPubkey);
-      if (!programInfo) throw new Error("Program not found");
-
-      const programData = await connection.getAccountInfo(
-        new PublicKey(programInfo.data.slice(4, 36))
+      const programInfo = await connection.getAccountInfo(
+        new PublicKey(programId)
       );
-      if (!programData) throw new Error("Program data not found");
+      if (!programInfo) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: Program with ID ${programId} not found.`,
+            },
+          ],
+        };
+      }
 
-      const programAuthority = new PublicKey(programData.data.slice(0, 32));
+      // Get program data account address
+      const programDataAddress = new PublicKey(programInfo.data.slice(4, 36));
+
+      // Fetch program data account
+      const programData = await connection.getAccountInfo(programDataAddress);
+      if (!programData) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: Program data not found for ${programId}.`,
+            },
+          ],
+        };
+      }
+      // Extract information safely
+      const upgradeAuthorityAddress = new PublicKey(
+        programData.data.slice(13, 45)
+      );
+
       return {
         content: [
           {
             type: "text",
-            text: `Program Authority: ${programAuthority.toBase58()}`,
+            text: `Program Authority: ${upgradeAuthorityAddress.toBase58()}`,
           },
         ],
       };
@@ -516,6 +585,7 @@ server.tool(
   }
 );
 
+// Checks if a program has verified build, security.txt
 server.tool(
   "checkupProgram",
   "Checks if a program has verified build, security.txt",
@@ -580,7 +650,7 @@ server.tool(
   }
 );
 
-
+// Checks various aspects of a Solana program deployment
 server.tool(
   "checkProgramDeployment",
   "Checks various aspects of a Solana program deployment",
@@ -716,6 +786,7 @@ server.tool(
   }
 );
 
+// Generate an example CPI statement for a given Solana program
 server.tool(
   "createCPI",
   "Generate an example CPI statement for a given Solana program",
@@ -754,6 +825,8 @@ server.tool(
     }
   }
 );
+
+// Fetch Solana program data from Dune Analytics
 server.tool(
   "getDuneSolanaData",
   "Fetch Solana program data from Dune Analytics",
@@ -767,28 +840,27 @@ server.tool(
 
       const client = new DuneClient(DUNE_API_KEY);
 
-      const [top1000signersResult, programCallsResult, cpiProgramCallsResult] = await Promise.all([
-        client.runQuery({
-          queryId: 2611952,
-          query_parameters: [
-            QueryParameter.text("program id", programId),
-            QueryParameter.number("days", days),
-          ],
-        }),
-        client.runQuery({
-          queryId: 2611885,
-          query_parameters: [
-            QueryParameter.text("program id", programId),
-            QueryParameter.number("days", days),
-          ],
-        }),
-        client.runQuery({
-          queryId: 2611938,
-          query_parameters: [
-            QueryParameter.text("program id", programId),
-          ],
-        })
-      ]);
+      const [top1000signersResult, programCallsResult, cpiProgramCallsResult] =
+        await Promise.all([
+          client.runQuery({
+            queryId: 2611952,
+            query_parameters: [
+              QueryParameter.text("program id", programId),
+              QueryParameter.number("days", days),
+            ],
+          }),
+          client.runQuery({
+            queryId: 2611885,
+            query_parameters: [
+              QueryParameter.text("program id", programId),
+              QueryParameter.number("days", days),
+            ],
+          }),
+          client.runQuery({
+            queryId: 2611938,
+            query_parameters: [QueryParameter.text("program id", programId)],
+          }),
+        ]);
 
       const top1000signersdata = top1000signersResult.result?.rows;
       const programCallsdata = programCallsResult.result?.rows;
@@ -824,6 +896,187 @@ server.tool(
     }
   }
 );
+// Build a transaction from a list of instructions
+server.tool(
+  "buildTransaction",
+  "Build a transaction from a list of instructions",
+  {
+    instructions: z.array(
+      z.object({
+        programId: z.string(),
+        keys: z.array(
+          z.object({
+            pubkey: z.string(),
+            isSigner: z.boolean(),
+            isWritable: z.boolean(),
+          })
+        ),
+        data: z.string(), // Base58 encoded instruction data
+      })
+    ),
+    recentBlockhash: z.string().optional(),
+  },
+  async ({ instructions, recentBlockhash }) => {
+    try {
+      const payerPrivateKey = process.env.PAYER_PRIVATE_KEY;
+      if (!payerPrivateKey) {
+        throw new Error("PAYER_PRIVATE_KEY not found in environment variables");
+      }
+
+      const payer = Keypair.fromSecretKey(bs58.decode(payerPrivateKey));
+
+      const transaction = new Transaction();
+
+      // Add instructions to the transaction
+      instructions.forEach((ix) => {
+        const keys = ix.keys.map((key) => ({
+          pubkey: new PublicKey(key.pubkey),
+          isSigner: key.isSigner,
+          isWritable: key.isWritable,
+        }));
+
+        const instruction = new TransactionInstruction({
+          programId: new PublicKey(ix.programId),
+          keys,
+          data: Buffer.from(bs58.decode(ix.data)),
+        });
+
+        transaction.add(instruction);
+      });
+
+      // Set the payer
+      transaction.feePayer = payer.publicKey;
+
+      // Set the recent blockhash if provided, otherwise fetch it
+      if (recentBlockhash) {
+        transaction.recentBlockhash = recentBlockhash;
+      } else {
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+      }
+
+      // Partially sign the transaction (payer only)
+      transaction.partialSign(payer);
+
+      // Serialize the transaction
+      const serializedTransaction = transaction
+        .serialize({
+          requireAllSignatures: false,
+          verifySignatures: false,
+        })
+        .toString("base64");
+
+      return {
+        content: [
+          { type: "text", text: "Serialized Transaction:" },
+          { type: "text", text: serializedTransaction },
+          { type: "text", text: "\nTransaction Details:" },
+          { type: "text", text: JSON.stringify(transaction, null, 2) },
+        ],
+      };
+    } catch (error) {
+      logToFile(`Error: ${(error as Error).message}`);
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+// Submit a serialized transaction to the Solana blockchain
+server.tool(
+  "submitTransaction",
+  "Submit a serialized transaction to the Solana blockchain",
+  {
+    serializedTransaction: z.string(),
+    skipPreflight: z.boolean().optional().default(false),
+  },
+  async ({ serializedTransaction, skipPreflight }) => {
+    try {
+      // Decode the serialized transaction
+      const transaction = Transaction.from(
+        Buffer.from(serializedTransaction, "base64")
+      );
+
+      // Submit the transaction
+      const signature = await sendAndConfirmRawTransaction(
+        connection,
+        transaction.serialize(),
+        { skipPreflight, preflightCommitment: "confirmed" }
+      );
+
+      return {
+        content: [
+          { type: "text", text: "Transaction submitted successfully!" },
+          { type: "text", text: `Signature: ${signature}` },
+          {
+            type: "text",
+            text: `Solana Explorer URL: https://explorer.solana.com/tx/${signature}`,
+          },
+        ],
+      };
+    } catch (error) {
+      logToFile(`Error submitting transaction: ${(error as Error).message}`);
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+// Fetch and analyze transaction details using Helius API
+server.tool(
+  "checkTransaction",
+  "Fetch and analyze transaction details using Helius API",
+  {
+    signature: z.string(),
+  },
+  async ({ signature }) => {
+    try {
+      const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+      if (!HELIUS_API_KEY) {
+        throw new Error("HELIUS_API_KEY not found in environment variables");
+      }
+
+      const response = await fetch(
+        `https://api.helius.xyz/v0/transactions?api-key=${HELIUS_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            transactions: [signature],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data || data.length === 0) {
+        return {
+          content: [{ type: "text", text: "No transaction data found." }],
+        };
+      }
+
+      const transaction = data[0];
+
+      return {
+        content: [
+          { type: "text", text: "Transaction Analysis:" },
+          { type: "text", text: JSON.stringify(transaction, null, 2) },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+// Fetch Solana documentation for clusters
 server.resource(
   "solanaDocsClusters",
   new ResourceTemplate("solana://docs/references/clusters", {
@@ -856,35 +1109,35 @@ server.resource(
   }
 );
 server.resource(
-    "solanaDocsInstallation",
-    new ResourceTemplate("solana://docs/intro/installation", { list: undefined }),
-    async (uri) => {
-      try {
-        const response = await fetch(
-          `https://raw.githubusercontent.com/solana-foundation/solana-com/main/content/docs/intro/installation.mdx`
-        );
-        const fileContent = await response.text();
-        return {
-          contents: [
-            {
-              uri: uri.href,
-              text: fileContent,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          contents: [
-            {
-              uri: uri.href,
-              text: `Error: ${(error as Error).message}`,
-            },
-          ],
-        };
-      }
+  "solanaDocsInstallation",
+  new ResourceTemplate("solana://docs/intro/installation", { list: undefined }),
+  async (uri) => {
+    try {
+      const response = await fetch(
+        `https://raw.githubusercontent.com/solana-foundation/solana-com/main/content/docs/intro/installation.mdx`
+      );
+      const fileContent = await response.text();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            text: fileContent,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            text: `Error: ${(error as Error).message}`,
+          },
+        ],
+      };
     }
-  );
-  
+  }
+);
+
 server.prompt(
   "calculate-storage-deposit",
   "Calculate storage deposit for a specified number of bytes",

@@ -59,7 +59,12 @@ If you have `ts-node`:
   "mcpServers": {
     "solana-dev": {
       "command": "ts-node",
-      "args": ["<full-path-to-repo>/index.ts"]
+      "args": ["/path/to/your/solana-dev-mcp/index.ts"],
+      "env": {
+        "PAYER_PRIVATE_KEY": "${PAYER_PRIVATE_KEY}",
+        "DUNE_API_KEY": "${DUNE_API_KEY}",
+        "HELIUS_RPC_URL": "${HELIUS_RPC_URL}"
+      }
     }
   }
 }
@@ -72,7 +77,12 @@ If you don't have `ts-node` installed globally:
   "mcpServers": {
     "solana-dev": {
       "command": "node",
-      "args": ["<full-path-to-repo>/dist/index.js"]
+      "args": ["/path/to/your/solana-dev-mcp/index.ts"],
+      "env": {
+        "PAYER_PRIVATE_KEY": "${PAYER_PRIVATE_KEY}",
+        "DUNE_API_KEY": "${DUNE_API_KEY}",
+        "HELIUS_RPC_URL": "${HELIUS_RPC_URL}"
+      }
     }
   }
 }
@@ -157,7 +167,7 @@ Please use a sandboxed environment when trying out MCP servers, with no crucial 
 - **Output**: GPA filters and account types.
 
 ### 5. testProgramIdl
-- **Description**: Test a Solana program IDL with input JSON.
+- **Description**: Test a Solana program IDL with input JSON and simulate the transaction onchain.
 - **Input**: 
   - `programId`: Program ID.
   - `inputJson`: JSON input for the instruction.
@@ -190,13 +200,39 @@ Please use a sandboxed environment when trying out MCP servers, with no crucial 
 - **Output**: CPI example, program IDL, and cluster information.
 
 ### 10. getDuneSolanaData
-- **Description**: Fetch Solana program data from Dune Analytics.
+- **Description**: Fetch Solana program data from Dune Analytics. Instruction count, program calls, and CPI program calls data, and top 1000 signers.
 - **Input**: 
   - `programId`: Program ID.
   - `days`: Number of days to look back (default: 10).
 - **Output**: Top 1000 signers, program calls, and CPI program calls data.
 
-## Usage
+### 11. buildTransaction
+- **Description**: Build a transaction from a list of instructions.
+- **Input**: 
+  - `instructions`: An array of instruction objects, each containing:
+    - `programId`: The program ID (as a string)
+    - `keys`: An array of account key objects, each containing:
+      - `pubkey`: The public key (as a string)
+      - `isSigner`: Boolean indicating if the account is a signer
+      - `isWritable`: Boolean indicating if the account is writable
+    - `data`: Base58 encoded instruction data
+  - `recentBlockhash` (optional): Recent blockhash to use for the transaction
+  
+- **Output**: 
+  - Serialized transaction (base64 encoded)
+  - Transaction details in JSON format
+
+### 12. checkTransaction
+- **Description**: Fetch and analyze transaction details using the Helius API.
+- **Input**: 
+  - `signature`: The transaction signature (a 64-byte base58 encoded string).
+- **Output**: 
+  - Transaction analysis including signature, timestamp, success status, fee, number of instructions, and involved accounts.
+  - Full transaction data as returned by the Helius API.
+
+**Note**: This tool requires the `HELIUS_API_KEY` to be set in the environment variables.
+
+
 
 To use these tools, you need to set up the necessary environment variables and dependencies. Each tool can be called with the required input parameters, and it will return the specified output.
 
