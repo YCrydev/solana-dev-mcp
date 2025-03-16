@@ -140,44 +140,50 @@ server.tool(
 
 // Get Priority Fee
 server.tool(
-  "getPriorityFee",
-  "Used to look up priority fee Transaction Info",
-  { serealizedTransaction: z.string() },
-  async ({ serealizedTransaction }) => {
-    try {
-      const HeliusURL = process.env.HELIUS_RPC_URL;
-      if (!HeliusURL) {
-        throw new Error("HELIUS_RPC_URL environment variable is not set");
+    "getPriorityFee",
+    "Used to look up priority fee Transaction Info",
+    { serializedTransaction: z.string() },
+    async ({ serializedTransaction }) => {
+      try {
+        const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+        if (!HELIUS_API_KEY) {
+          return {
+            content: [{ type: "text", text: "Error: HELIUS_API_KEY environment variable is not set" }],
+          };
+        }
+        logToFile("HELIUS_API_KEY: " + HELIUS_API_KEY);
+        const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "1",
+            method: "getPriorityFeeEstimate",
+            params: [
+              {
+                transaction: serializedTransaction,
+                options: { includeAllPriorityFeeLevels: true ,transactionEncoding: "base64"},
+              },
+            ],
+          }),
+        });
+  
+        const result = await response.json();
+        const priorityFee = result.result;
+        
+        // Ensure that priorityFee is not undefined or null
+        const responseText = priorityFee ? JSON.stringify(priorityFee, null, 2) : "No priority fee data available"+JSON.stringify(result, null, 2);
+        
+        return {
+          content: [{ type: "text", text: responseText }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+        };
       }
-
-      const response = await fetch(HeliusURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "1",
-          method: "getPriorityFeeEstimate",
-          params: [
-            {
-              transaction: serealizedTransaction,
-              options: { includeAllPriorityFeeLevels: true },
-            },
-          ],
-        }),
-      });
-
-      const result = await response.json();
-      const priorityFee = result.result;
-      return {
-        content: [{ type: "text", text: JSON.stringify(priorityFee, null, 2) }],
-      };
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
-      };
     }
-  }
-);
+  );
 // Generate security.txt content for Solana programs
 server.tool(
   "generateSecurityTxt",
@@ -1024,7 +1030,7 @@ server.tool(
 );
 // Fetch and analyze transaction details using Helius API
 server.tool(
-  "checkTransaction",
+  "analyzeTransaction",
   "Fetch and analyze transaction details using Helius API",
   {
     signature: z.string(),

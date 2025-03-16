@@ -222,7 +222,7 @@ Please use a sandboxed environment when trying out MCP servers, with no crucial 
   - Serialized transaction (base64 encoded)
   - Transaction details in JSON format
 
-### 12. checkTransaction
+### 12. analyzeTransaction
 - **Description**: Fetch and analyze transaction details using the Helius API.
 - **Input**: 
   - `signature`: The transaction signature (a 64-byte base58 encoded string).
@@ -230,7 +230,7 @@ Please use a sandboxed environment when trying out MCP servers, with no crucial 
   - Transaction analysis including signature, timestamp, success status, fee, number of instructions, and involved accounts.
   - Full transaction data as returned by the Helius API.
 
-**Note**: This tool requires the `HELIUS_API_KEY` to be set in the environment variables.
+**Note**: This tool requires the `HELIUS_RPC_URL` to be set in the environment variables.
 
 
 
