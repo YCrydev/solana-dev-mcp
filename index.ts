@@ -57,6 +57,35 @@ const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 let transport: SSEServerTransport | null = null;
 app.use(express.json());
 app.get("/sse", (req, res) => {
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+  
+    // Send an initial connection message
+    res.write('data: {"type":"connection","status":"connected"}\n\n');
+  
+    // Keep connection alive
+    const keepAlive = setInterval(() => {
+      res.write('data: {"type":"ping"}\n\n');
+    }, 15000); // Send ping every 15 seconds
+  
+    // Handle client disconnect
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      res.end();
+    });
+  
+    // Handle errors
+    req.on('error', (error) => {
+      console.error('SSE Error:', error);
+      clearInterval(keepAlive);
+      res.end();
+    });
+    
   transport = new SSEServerTransport("/messages", res);
   server.connect(transport);
 });

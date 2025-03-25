@@ -8,6 +8,14 @@
     ],
     "routes": [
       {
+        "src": "/sse",
+        "dest": "index.ts",
+        "headers": {
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive"
+        }
+      },
+      {
         "src": "/(.*)",
         "dest": "index.ts"
       }
