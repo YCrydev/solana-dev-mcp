@@ -22,13 +22,24 @@ import * as anchor from "@project-serum/anchor";
 import { Program } from "@project-serum/anchor";
 import { bs58, utf8 } from "@project-serum/anchor/dist/cjs/utils/bytes";
 import { BorshAccountsCoder } from "@project-serum/anchor";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { ServerResponse } from "http";
+import express from "express";
+
 import { createCPI } from "./solanaprogram";
 
 // Create an MCP server
-const server = new McpServer({
-  name: "Solana RPC Tools",
-  version: "1.0.0",
-});
+const server = new McpServer(
+  {
+    name: "Solana RPC Tools",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {},
+  }
+);
+const app = express();
+const port = 3333;
 function logToFile(message: any) {
   const timestamp = new Date().toISOString();
   const logMessage = `${timestamp}: ${message}\n`;
@@ -43,7 +54,41 @@ function logToFile(message: any) {
 const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 
 // Solana RPC Methods as Tools
+let transport: SSEServerTransport | null = null;
+app.use(express.json());
+app.get("/sse", (req, res) => {
+  transport = new SSEServerTransport("/messages", res);
+  server.connect(transport);
+});
 
+app.post("/messages", (req, res) => {
+  try {
+    logToFile("Received message: " + JSON.stringify(req.body));
+    if (transport) {
+      transport.handlePostMessage(req, res, req.body);
+    } else {
+      res.status(500).send("SSE transport not initialized");
+    }
+  } catch (error) {
+    console.error("Failed to handle post message:", error);
+    logToFile(`Failed to handle post message: ${error}`);
+    res.status(500).send("Failed to handle post message");
+  }
+});
+
+try {
+  app.listen(port, () => {
+    const message = `Server running at http://localhost:${port}`;
+    console.log(message);
+    logToFile(message);
+  });
+} catch (error) {
+  console.error("Failed to start server:", error);
+  logToFile(`Failed to start server: ${error}`);
+}
+app.post("/test", (req, res) => {
+  res.json({ message: "Test successful" });
+});
 // Get Account Info
 server.tool(
   "getAccountInfo",
@@ -140,19 +185,26 @@ server.tool(
 
 // Get Priority Fee
 server.tool(
-    "getPriorityFee",
-    "Used to look up priority fee Transaction Info",
-    { serializedTransaction: z.string() },
-    async ({ serializedTransaction }) => {
-      try {
-        const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
-        if (!HELIUS_API_KEY) {
-          return {
-            content: [{ type: "text", text: "Error: HELIUS_API_KEY environment variable is not set" }],
-          };
-        }
-        logToFile("HELIUS_API_KEY: " + HELIUS_API_KEY);
-        const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, {
+  "getPriorityFee",
+  "Used to look up priority fee Transaction Info",
+  { serializedTransaction: z.string() },
+  async ({ serializedTransaction }) => {
+    try {
+      const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+      if (!HELIUS_API_KEY) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: HELIUS_API_KEY environment variable is not set",
+            },
+          ],
+        };
+      }
+      logToFile("HELIUS_API_KEY: " + HELIUS_API_KEY);
+      const response = await fetch(
+        `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -162,28 +214,34 @@ server.tool(
             params: [
               {
                 transaction: serializedTransaction,
-                options: { includeAllPriorityFeeLevels: true ,transactionEncoding: "base64"},
+                options: {
+                  includeAllPriorityFeeLevels: true,
+                  transactionEncoding: "base64",
+                },
               },
             ],
           }),
-        });
-  
-        const result = await response.json();
-        const priorityFee = result.result;
-        
-        // Ensure that priorityFee is not undefined or null
-        const responseText = priorityFee ? JSON.stringify(priorityFee, null, 2) : "No priority fee data available"+JSON.stringify(result, null, 2);
-        
-        return {
-          content: [{ type: "text", text: responseText }],
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
-        };
-      }
+        }
+      );
+
+      const result = await response.json();
+      const priorityFee = result.result;
+
+      // Ensure that priorityFee is not undefined or null
+      const responseText = priorityFee
+        ? JSON.stringify(priorityFee, null, 2)
+        : "No priority fee data available" + JSON.stringify(result, null, 2);
+
+      return {
+        content: [{ type: "text", text: responseText }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
     }
-  );
+  }
+);
 // Generate security.txt content for Solana programs
 server.tool(
   "generateSecurityTxt",
@@ -1323,5 +1381,3 @@ server.prompt(
 // );
 
 // Start receiving messages on stdin and sending messages on stdout
-const transport = new StdioServerTransport();
-server.connect(transport);
