@@ -50,6 +50,38 @@ function logToFile(message: any) {
     //   }
   });
 }
+// Serve a simple HTML page on the root route
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>SOLANA MCP SERVER</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          background-color: #f0f0f0;
+        }
+        h1 {
+          color: #3d3d3d;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>SOLANA MCP SERVER</h1>
+    </body>
+    </html>
+  `);
+});
+
 // Initialize Solana connection
 const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 
@@ -57,35 +89,6 @@ const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 let transport: SSEServerTransport | null = null;
 app.use(express.json());
 app.get("/sse", (req, res) => {
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
-    });
-  
-    // Send an initial connection message
-    res.write('data: {"type":"connection","status":"connected"}\n\n');
-  
-    // Keep connection alive
-    const keepAlive = setInterval(() => {
-      res.write('data: {"type":"ping"}\n\n');
-    }, 15000); // Send ping every 15 seconds
-  
-    // Handle client disconnect
-    req.on('close', () => {
-      clearInterval(keepAlive);
-      res.end();
-    });
-  
-    // Handle errors
-    req.on('error', (error) => {
-      console.error('SSE Error:', error);
-      clearInterval(keepAlive);
-      res.end();
-    });
-    
   transport = new SSEServerTransport("/messages", res);
   server.connect(transport);
 });
