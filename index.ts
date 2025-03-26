@@ -38,7 +38,7 @@ const server = new McpServer(
     capabilities: {},
   }
 );
-let connections = new Map()
+let connections = new Map();
 const app = express();
 const port = 3333;
 function logToFile(message: any) {
@@ -89,40 +89,72 @@ const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 // Solana RPC Methods as Tools
 let transport: SSEServerTransport | null = null;
 app.use(express.json());
+
 app.get("/sse", (req, res) => {
   const clientId = Date.now().toString(); // Generate unique client ID
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-  });
-  
+
+  // Check if headers haven't been sent yet
+  if (!res.headersSent) {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    });
+  }
+
   // Keep connection alive
   const keepAlive = setInterval(() => {
-    res.write(': keepalive\n\n');
+    if (!res.writableEnded) {
+      res.write(": keepalive\n\n");
+    }
   }, 30000);
 
   // Store the connection
-  const transport = new SSEServerTransport("/messages", res);
-  connections.set(clientId, { transport, res, keepAlive });
-  server.connect(transport);
+  try {
+    const transport = new SSEServerTransport("/messages", res);
+    connections.set(clientId, { transport, res, keepAlive });
 
-  // Handle client disconnect
-  req.on('close', () => {
+    // Connect only if transport was created successfully
+    server.connect(transport);
+
+    // Handle client disconnect
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      connections.delete(clientId);
+    });
+
+    // Handle errors
+    res.on("error", () => {
+      clearInterval(keepAlive);
+      connections.delete(clientId);
+    });
+  } catch (error) {
     clearInterval(keepAlive);
-    connections.delete(clientId);
-  });
+    logToFile(`Error establishing SSE connection: ${error}`);
+    if (!res.headersSent) {
+      res.status(500).send("Failed to establish SSE connection");
+    }
+  }
 });
 
 app.post("/messages", (req, res) => {
   try {
     logToFile("Received message: " + JSON.stringify(req.body));
-    
+
+    let handled = false;
     // Find active connection and use its transport
     for (const [clientId, connection] of connections) {
       try {
-        connection.transport.handlePostMessage(req, res, req.body);
-        return; // Exit after successful handling
+        if (!connection.res.writableEnded) {
+          connection.transport.handlePostMessage(req, res, req.body);
+          handled = true;
+          break;
+        } else {
+          // Clean up dead connection
+          clearInterval(connection.keepAlive);
+          connections.delete(clientId);
+        }
       } catch (e) {
         logToFile(`Failed to handle message for client ${clientId}: ${e}`);
         // Remove stale connection
@@ -131,13 +163,18 @@ app.post("/messages", (req, res) => {
       }
     }
 
-    // If we get here, no valid connection was found
-    res.status(503).json({ error: "No active SSE connection found. Please reconnect." });
-    
+    // If no valid connection handled the message
+    if (!handled && !res.headersSent) {
+      res
+        .status(503)
+        .json({ error: "No active SSE connection found. Please reconnect." });
+    }
   } catch (error) {
     console.error("Failed to handle post message:", error);
     logToFile(`Failed to handle post message: ${error}`);
-    res.status(500).send("Failed to handle post message");
+    if (!res.headersSent) {
+      res.status(500).send("Failed to handle post message");
+    }
   }
 });
 
