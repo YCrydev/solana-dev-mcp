@@ -38,6 +38,7 @@ const server = new McpServer(
     capabilities: {},
   }
 );
+let connections = new Map()
 const app = express();
 const port = 3333;
 function logToFile(message: any) {
@@ -89,18 +90,50 @@ const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
 let transport: SSEServerTransport | null = null;
 app.use(express.json());
 app.get("/sse", (req, res) => {
-  transport = new SSEServerTransport("/messages", res);
+  const clientId = Date.now().toString(); // Generate unique client ID
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+  
+  // Keep connection alive
+  const keepAlive = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 30000);
+
+  // Store the connection
+  const transport = new SSEServerTransport("/messages", res);
+  connections.set(clientId, { transport, res, keepAlive });
   server.connect(transport);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    connections.delete(clientId);
+  });
 });
 
 app.post("/messages", (req, res) => {
   try {
     logToFile("Received message: " + JSON.stringify(req.body));
-    if (transport) {
-      transport.handlePostMessage(req, res, req.body);
-    } else {
-      res.status(500).send("SSE transport not initialized");
+    
+    // Find active connection and use its transport
+    for (const [clientId, connection] of connections) {
+      try {
+        connection.transport.handlePostMessage(req, res, req.body);
+        return; // Exit after successful handling
+      } catch (e) {
+        logToFile(`Failed to handle message for client ${clientId}: ${e}`);
+        // Remove stale connection
+        clearInterval(connection.keepAlive);
+        connections.delete(clientId);
+      }
     }
+
+    // If we get here, no valid connection was found
+    res.status(503).json({ error: "No active SSE connection found. Please reconnect." });
+    
   } catch (error) {
     console.error("Failed to handle post message:", error);
     logToFile(`Failed to handle post message: ${error}`);
